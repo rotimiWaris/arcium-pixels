@@ -18,6 +18,9 @@ body {
   background-color: black;
   cursor: pointer;
   border: 2px solid #333;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
 }
 
 img {

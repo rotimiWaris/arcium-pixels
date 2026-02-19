@@ -8,6 +8,7 @@ window.addEventListener("load", function () {
   const modalCanvas = document.getElementById("modalCanvas");
   const modalCtx = modalCanvas ? modalCanvas.getContext("2d") : null;
   const closeModalButton = document.querySelector(".close");
+  canvas.style.touchAction = "manipulation";
 
   // SETTING CANVAS HEIGHT AND WIDTH
   function setCanvasSize() {
@@ -24,7 +25,7 @@ window.addEventListener("load", function () {
     const imageHeight = sourceImage.naturalHeight || sourceImage.height || 9;
     const imageRatio = imageWidth / imageHeight;
 
-    let width = Math.min(maxCanvasWidth, 1200);
+    let width = maxCanvasWidth;
     let height = width / imageRatio;
 
     if (height > maxCanvasHeight) {
@@ -41,10 +42,11 @@ window.addEventListener("load", function () {
 
   // CLASS FOR EACH PARTICLE
   class Particle {
-    constructor(effect, x, y, size) {
+    constructor(effect, x, y, size, id) {
       this.effect = effect;
-      this.originX = Math.floor(x);
-      this.originY = Math.floor(y);
+      this.id = id;
+      this.originX = x;
+      this.originY = y;
       this.x = this.originX;
       this.y = this.originY;
       this.color = "#ffffff";
@@ -70,11 +72,11 @@ window.addEventListener("load", function () {
       this.height = height;
       this.particleArray = [];
       this.image = document.getElementById("image");
-      this.baseParticleSize = 2.5;
+      this.baseParticleSize = 3.5;
       this.minParticleSize = 0.25;
       this.particleSize = this.baseParticleSize;
-      this.gap = 6;
-      this.maxParticles = 800;
+      this.maxParticles = 512;
+      this.normalizedShapePoints = this.getNormalizedShapePoints();
       this.updateLayout();
     }
 
@@ -84,8 +86,8 @@ window.addEventListener("load", function () {
 
       const imageWidth = this.image.naturalWidth || this.image.width;
       const imageHeight = this.image.naturalHeight || this.image.height;
-      const maxRenderWidth = this.width * 0.8;
-      const maxRenderHeight = this.height * 0.8;
+      const maxRenderWidth = this.width;
+      const maxRenderHeight = this.height;
       const scale = Math.min(
         maxRenderWidth / imageWidth,
         maxRenderHeight / imageHeight,
@@ -98,44 +100,33 @@ window.addEventListener("load", function () {
       this.y = Math.floor(this.centerY - this.renderHeight * 0.5);
     }
 
-    init(context) {
-      this.particleArray = [];
-
+    getNormalizedShapePoints() {
+      const sourceWidth = this.image.naturalWidth || this.image.width;
+      const sourceHeight = this.image.naturalHeight || this.image.height;
       const offscreenCanvas = document.createElement("canvas");
-      offscreenCanvas.width = this.renderWidth;
-      offscreenCanvas.height = this.renderHeight;
+      offscreenCanvas.width = sourceWidth;
+      offscreenCanvas.height = sourceHeight;
       const offscreenCtx = offscreenCanvas.getContext("2d", {
         willReadFrequently: true,
       });
-      offscreenCtx.drawImage(
-        this.image,
-        0,
-        0,
-        this.renderWidth,
-        this.renderHeight,
-      );
+      offscreenCtx.drawImage(this.image, 0, 0, sourceWidth, sourceHeight);
 
-      const imageData = offscreenCtx.getImageData(
+      const data = offscreenCtx.getImageData(
         0,
         0,
-        this.renderWidth,
-        this.renderHeight,
-      );
-      const pixels = imageData.data;
-      const visiblePixels = [];
+        sourceWidth,
+        sourceHeight,
+      ).data;
+      const candidates = [];
 
       const getColorAt = (x, y) => {
-        const index = (y * this.renderWidth + x) * 4;
-        return [pixels[index], pixels[index + 1], pixels[index + 2]];
+        const index = (y * sourceWidth + x) * 4;
+        return [data[index], data[index + 1], data[index + 2]];
       };
-
       const topLeft = getColorAt(0, 0);
-      const topRight = getColorAt(this.renderWidth - 1, 0);
-      const bottomLeft = getColorAt(0, this.renderHeight - 1);
-      const bottomRight = getColorAt(
-        this.renderWidth - 1,
-        this.renderHeight - 1,
-      );
+      const topRight = getColorAt(sourceWidth - 1, 0);
+      const bottomLeft = getColorAt(0, sourceHeight - 1);
+      const bottomRight = getColorAt(sourceWidth - 1, sourceHeight - 1);
       const bgColor = [
         Math.floor(
           (topLeft[0] + topRight[0] + bottomLeft[0] + bottomRight[0]) / 4,
@@ -155,126 +146,141 @@ window.addEventListener("load", function () {
         return Math.sqrt(dr * dr + dg * dg + db * db);
       };
 
-      const collectVisiblePixels = (step) => {
-        const candidates = [];
-        for (let y = 0; y < this.renderHeight; y += step) {
-          for (let x = 0; x < this.renderWidth; x += step) {
-            const index = (y * this.renderWidth + x) * 4;
-            const alpha = pixels[index + 3];
-            const red = pixels[index];
-            const green = pixels[index + 1];
-            const blue = pixels[index + 2];
-            if (alpha > 40 && colorDistance(red, green, blue, bgColor) > 35) {
-              candidates.push({ x: this.x + x, y: this.y + y });
-            }
-          }
-        }
-        return candidates;
-      };
-
-      visiblePixels.push(...collectVisiblePixels(this.gap));
-
-      // If candidates are too few, sample every pixel for dense placement.
-      if (visiblePixels.length < this.maxParticles) {
-        visiblePixels.length = 0;
-        visiblePixels.push(...collectVisiblePixels(1));
-      }
-
-      // Fallback to opaque pixels if foreground detection is too strict.
-      if (visiblePixels.length < this.maxParticles) {
-        visiblePixels.length = 0;
-        for (let y = 0; y < this.renderHeight; y++) {
-          for (let x = 0; x < this.renderWidth; x++) {
-            const index = (y * this.renderWidth + x) * 4;
-            if (pixels[index + 3] > 40) {
-              visiblePixels.push({ x: this.x + x, y: this.y + y });
-            }
+      for (let y = 0; y < sourceHeight; y++) {
+        for (let x = 0; x < sourceWidth; x++) {
+          const index = (y * sourceWidth + x) * 4;
+          const alpha = data[index + 3];
+          const red = data[index];
+          const green = data[index + 1];
+          const blue = data[index + 2];
+          if (alpha > 40 && colorDistance(red, green, blue, bgColor) > 35) {
+            candidates.push({ x, y });
           }
         }
       }
 
-      const totalVisible = visiblePixels.length;
-      const particleCount = Math.min(this.maxParticles, totalVisible);
-      let selectedPixels = [];
+      if (candidates.length < this.maxParticles) {
+        candidates.length = 0;
+        for (let y = 0; y < sourceHeight; y++) {
+          for (let x = 0; x < sourceWidth; x++) {
+            const index = (y * sourceWidth + x) * 4;
+            if (data[index + 3] > 40) candidates.push({ x, y });
+          }
+        }
+      }
 
-      if (particleCount > 0) {
-        const usedIndices = new Set();
-        const step = totalVisible / Math.max(particleCount, 1);
-        for (let i = 0; i < particleCount; i++) {
-          const index = Math.floor(i * step);
-          if (!usedIndices.has(index) && visiblePixels[index]) {
-            usedIndices.add(index);
-            selectedPixels.push(visiblePixels[index]);
+      if (candidates.length === 0) return [];
+
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (let i = 0; i < candidates.length; i++) {
+        const p = candidates[i];
+        if (p.x < minX) minX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y > maxY) maxY = p.y;
+      }
+      const boxWidth = Math.max(1, maxX - minX);
+      const boxHeight = Math.max(1, maxY - minY);
+
+      const normalized = candidates.map((p) => ({
+        nx: (p.x - minX) / boxWidth,
+        ny: (p.y - minY) / boxHeight,
+      }));
+
+      // Reduce very large pools first, then run farthest-point sampling
+      // to maximize spacing and avoid overlap.
+      let pool = normalized;
+      const maxPoolSize = 30000;
+      if (pool.length > maxPoolSize) {
+        const stride = Math.ceil(pool.length / maxPoolSize);
+        const reduced = [];
+        for (let i = 0; i < pool.length; i += stride) reduced.push(pool[i]);
+        pool = reduced;
+      }
+
+      if (pool.length <= this.maxParticles) {
+        const padded = [];
+        for (let i = 0; i < this.maxParticles; i++) {
+          padded.push(pool[i % pool.length]);
+        }
+        return padded;
+      }
+
+      const selected = [];
+      const selectedMask = new Array(pool.length).fill(false);
+      const minDistSq = new Array(pool.length).fill(Infinity);
+
+      selected.push(pool[0]);
+      selectedMask[0] = true;
+
+      while (
+        selected.length < this.maxParticles &&
+        selected.length < pool.length
+      ) {
+        const last = selected[selected.length - 1];
+
+        for (let i = 0; i < pool.length; i++) {
+          if (selectedMask[i]) continue;
+          const dx = pool[i].nx - last.nx;
+          const dy = pool[i].ny - last.ny;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < minDistSq[i]) minDistSq[i] = d2;
+        }
+
+        let bestIndex = -1;
+        let bestScore = -1;
+        for (let i = 0; i < pool.length; i++) {
+          if (selectedMask[i]) continue;
+          if (minDistSq[i] > bestScore) {
+            bestScore = minDistSq[i];
+            bestIndex = i;
           }
         }
 
-        if (selectedPixels.length < particleCount) {
-          for (let i = 0; i < totalVisible; i++) {
-            if (!usedIndices.has(i)) {
-              usedIndices.add(i);
-              selectedPixels.push(visiblePixels[i]);
-              if (selectedPixels.length >= particleCount) break;
-            }
-          }
-        }
+        if (bestIndex === -1) break;
+        selectedMask[bestIndex] = true;
+        selected.push(pool[bestIndex]);
+      }
 
-        // Last resort only if the source shape has fewer than 400 unique candidates.
-        if (selectedPixels.length < particleCount) {
-          while (
-            selectedPixels.length < particleCount &&
-            visiblePixels.length > 0
-          ) {
-            selectedPixels.push(
-              visiblePixels[selectedPixels.length % visiblePixels.length],
-            );
-          }
+      // Safety fill to keep fixed count deterministic.
+      if (selected.length < this.maxParticles) {
+        const step = pool.length / (this.maxParticles - selected.length);
+        for (let i = 0; selected.length < this.maxParticles; i++) {
+          selected.push(pool[Math.floor((i * step) % pool.length)]);
         }
+      }
+      return selected;
+    }
 
-        // Auto-fit radius using a robust spacing estimate.
-        // Using a percentile avoids tiny outliers forcing all particles to shrink.
-        const nearestDistances = [];
-        for (let i = 0; i < selectedPixels.length; i++) {
-          let localMin = Infinity;
-          for (let j = 0; j < selectedPixels.length; j++) {
-            if (i === j) continue;
-            const dx = selectedPixels[i].x - selectedPixels[j].x;
-            const dy = selectedPixels[i].y - selectedPixels[j].y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist < localMin) localMin = dist;
-          }
-          if (Number.isFinite(localMin)) nearestDistances.push(localMin);
-        }
+    init(context) {
+      this.particleArray = [];
+      if (this.normalizedShapePoints.length === 0) {
+        context.clearRect(0, 0, this.width, this.height);
+        console.log("[particles] generated: 0 | size: 0");
+        return;
+      }
 
-        nearestDistances.sort((a, b) => a - b);
-        const p35Index = Math.max(
-          0,
-          Math.min(
-            nearestDistances.length - 1,
-            Math.floor(nearestDistances.length * 0.35),
-          ),
-        );
-        const spacingReference = nearestDistances[p35Index];
-        const fittedSize = Number.isFinite(spacingReference)
-          ? spacingReference * 0.49
-          : this.baseParticleSize;
-        const wideScreenFloor =
-          this.width >= 1000
-            ? 3.4
-            : this.width >= 700
-              ? 2.6
-              : this.minParticleSize;
-        this.particleSize = Math.max(
-          wideScreenFloor,
-          this.minParticleSize,
-          Math.min(this.baseParticleSize, fittedSize),
-        );
+      const count = this.maxParticles;
+      const aspectRatio = this.renderWidth / Math.max(1, this.renderHeight);
+      const cols = Math.max(1, Math.round(Math.sqrt(count * aspectRatio)));
+      const rows = Math.max(1, Math.ceil(count / cols));
+      const cellWidth = this.renderWidth / cols;
+      const cellHeight = this.renderHeight / rows;
+      const spacingReference = Math.min(cellWidth, cellHeight);
+      const fittedSize = spacingReference * 0.46;
+      this.particleSize = Math.max(
+        this.minParticleSize,
+        Math.min(this.baseParticleSize, fittedSize),
+      );
 
-        for (let i = 0; i < selectedPixels.length; i++) {
-          const pixel = selectedPixels[i];
-          this.particleArray.push(
-            new Particle(this, pixel.x, pixel.y, this.particleSize),
-          );
-        }
+      for (let i = 0; i < count; i++) {
+        const p = this.normalizedShapePoints[i];
+        const x = this.x + p.nx * (this.renderWidth - 1);
+        const y = this.y + p.ny * (this.renderHeight - 1);
+        this.particleArray.push(new Particle(this, x, y, this.particleSize, i));
       }
 
       context.clearRect(0, 0, this.width, this.height);
@@ -360,7 +366,8 @@ window.addEventListener("load", function () {
     modal.style.display = "none";
   }
 
-  canvas.addEventListener("click", (event) => {
+  canvas.addEventListener("pointerdown", (event) => {
+    if (event.pointerType === "touch") event.preventDefault();
     const rect = canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
