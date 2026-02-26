@@ -1,0 +1,21 @@
+# Frontend local config
+app/config.local.js
+
+# Env files
+.env
+.env.*
+!.env.example
+
+# Solana / Anchor build artifacts
+solana/target/
+solana/.anchor/
+solana/test-ledger/
+solana/node_modules/
+
+# Indexer
+services/indexer/node_modules/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/

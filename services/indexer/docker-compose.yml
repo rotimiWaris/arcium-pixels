@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: arcium_pixels_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: arcium_pixels
+    ports:
+      - "5432:5432"
+    volumes:
+      - arcium_pixels_pgdata:/var/lib/postgresql/data
+
+volumes:
+  arcium_pixels_pgdata:

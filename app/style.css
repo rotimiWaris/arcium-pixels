@@ -1,0 +1,421 @@
+:root {
+  --arcium-black: #000000;
+  --arcium-mist: #f1f1f1;
+  --arcium-purple: #6d45ff;
+  --arcium-pink: #f1a1ff;
+  --arcium-gray: #b7b7b7;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background:
+    radial-gradient(65% 55% at 50% 0%, rgba(109, 69, 255, 0.23) 0%, transparent 70%),
+    radial-gradient(45% 35% at 80% 100%, rgba(241, 161, 255, 0.16) 0%, transparent 75%),
+    var(--arcium-black);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+#disconnectWalletBtn {
+  display: none;
+}
+
+.wallet-controls {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 1200;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: min(62vw, 700px);
+}
+
+.arcium-status {
+  position: fixed;
+  top: 54px;
+  left: 14px;
+  z-index: 1200;
+  font-family: "Space Grotesk", system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 8px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(241, 161, 255, 0.38);
+  color: var(--arcium-mist);
+  background: rgba(8, 8, 10, 0.82);
+  max-width: min(92vw, 360px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+.arcium-status--ok {
+  border-color: rgba(106, 236, 162, 0.85);
+  color: #bff9d9;
+}
+
+.arcium-status--warn {
+  border-color: rgba(255, 201, 87, 0.85);
+  color: #ffe7a9;
+}
+
+.arcium-status--err {
+  border-color: rgba(255, 109, 109, 0.85);
+  color: #ffc2c2;
+}
+
+.text-logo {
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 1200;
+  font-family: "Syne", system-ui, sans-serif;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--arcium-mist);
+  animation: logoColorFill 3.2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes logoColorFill {
+  0%,
+  100% {
+    color: var(--arcium-mist);
+  }
+  50% {
+    color: var(--arcium-purple);
+  }
+}
+
+@media (max-width: 760px) {
+  .text-logo {
+    top: 10px;
+    left: 12px;
+    font-size: 18px;
+  }
+
+  .arcium-status {
+    top: 38px;
+    left: 12px;
+    right: 12px;
+    width: max-content;
+    max-width: calc(100vw - 24px);
+  }
+
+  .wallet-controls {
+    top: 80px;
+    right: 12px;
+    left: 12px;
+    max-width: none;
+    justify-content: flex-end;
+  }
+}
+
+.wallet-status {
+  color: var(--arcium-mist);
+  font-size: 13px;
+  font-family: "Space Grotesk", system-ui, sans-serif;
+}
+
+#canvas {
+  display: block;
+  background-color: var(--arcium-black);
+  cursor: pointer;
+  border: 2px solid rgba(109, 69, 255, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(241, 161, 255, 0.2) inset,
+    0 22px 60px rgba(109, 69, 255, 0.18);
+  border-radius: 12px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+}
+
+img {
+  display: none;
+}
+
+button {
+  padding: 10px 16px;
+  font-size: 14px;
+  font-family: "Space Grotesk", system-ui, sans-serif;
+  font-weight: 700;
+  color: var(--arcium-mist);
+  background: linear-gradient(
+    120deg,
+    rgba(109, 69, 255, 0.26),
+    rgba(241, 161, 255, 0.18)
+  );
+  border: 1px solid rgba(241, 161, 255, 0.46);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+button:hover {
+  border-color: var(--arcium-pink);
+  transform: translateY(-1px);
+}
+
+.wallet-provider {
+  position: relative;
+}
+
+#walletProviderSelect {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.wallet-provider-toggle {
+  min-width: 150px;
+  text-align: left;
+  padding-right: 34px;
+  position: relative;
+}
+
+.wallet-provider-toggle::after {
+  content: "";
+  position: absolute;
+  right: 13px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--arcium-pink);
+  border-bottom: 2px solid var(--arcium-pink);
+  transform: translateY(-60%) rotate(45deg);
+}
+
+.wallet-provider-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 100%;
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(241, 161, 255, 0.46);
+  background: rgba(8, 8, 10, 0.98);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+  z-index: 1300;
+}
+
+.wallet-provider-menu.open {
+  display: flex;
+}
+
+.wallet-provider-item {
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: rgba(109, 69, 255, 0.08);
+  color: var(--arcium-mist);
+  font-size: 13px;
+  font-weight: 700;
+  font-family: "Space Grotesk", system-ui, sans-serif;
+}
+
+.wallet-provider-item:hover {
+  border-color: rgba(241, 161, 255, 0.46);
+  background: rgba(109, 69, 255, 0.22);
+  transform: none;
+}
+
+.wallet-provider-item.active {
+  border-color: var(--arcium-pink);
+  background: rgba(241, 161, 255, 0.14);
+}
+
+
+/* Modal Styles */
+.modal {
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.82);
+  backdrop-filter: blur(3px);
+  justify-content: center;
+  align-items: center;
+}
+
+.modal-content {
+  position: relative;
+  background: linear-gradient(
+      180deg,
+      rgba(109, 69, 255, 0.08) 0%,
+      rgba(241, 161, 255, 0.04) 100%
+    ),
+    #0d0d0f;
+  padding: 20px;
+  border: 1px solid rgba(241, 161, 255, 0.55);
+  border-radius: 14px;
+  max-width: 90%;
+  max-height: 90%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.modal-title {
+  color: var(--arcium-mist);
+  font-family: "Syne", system-ui, sans-serif;
+  font-size: 28px;
+  margin: 0 0 12px 0;
+  letter-spacing: 0.02em;
+}
+
+.particle-info {
+  color: var(--arcium-gray);
+  font-size: 14px;
+  margin-bottom: 14px;
+}
+
+.owner-profile-link {
+  display: none;
+  margin-bottom: 12px;
+  font-size: 14px;
+  font-family: "Space Grotesk", system-ui, sans-serif;
+  font-weight: 700;
+  color: var(--arcium-pink);
+  text-decoration: none;
+}
+
+.owner-profile-link:hover {
+  text-decoration: underline;
+}
+
+.profile-form {
+  display: flex;
+  gap: 10px;
+  width: min(90vw, 420px);
+}
+
+.profile-input {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.7);
+  color: var(--arcium-mist);
+  border: 1px solid rgba(109, 69, 255, 0.45);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 16px;
+  outline: none;
+}
+
+.profile-input:focus {
+  border-color: var(--arcium-pink);
+}
+
+.fetch-status {
+  min-height: 22px;
+  margin-top: 10px;
+  color: var(--arcium-mist);
+  font-size: 14px;
+  font-family: "Space Grotesk", system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.profile-preview {
+  display: none;
+  margin-top: 8px;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 3px solid var(--arcium-purple);
+  object-fit: cover;
+}
+
+.add-btn {
+  margin-top: 14px;
+}
+
+.add-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.close {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  color: var(--arcium-mist);
+  font-size: 34px;
+  font-weight: 700;
+  cursor: pointer;
+  line-height: 1;
+  background: transparent;
+  border: none;
+  padding: 4px 8px;
+}
+
+.close:hover,
+.close:focus {
+  color: var(--arcium-pink);
+}
+
+.app-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 26px;
+  transform: translate(-50%, 20px);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 1600;
+  min-width: min(92vw, 380px);
+  max-width: min(92vw, 520px);
+  text-align: center;
+  font-family: "Space Grotesk", system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--arcium-mist);
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(241, 161, 255, 0.48);
+  background: rgba(8, 8, 10, 0.95);
+  transition:
+    transform 0.35s ease,
+    opacity 0.35s ease;
+}
+
+.app-toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.app-toast.success {
+  border-color: rgba(106, 236, 162, 0.85);
+  color: #c9ffe2;
+}
+
+.app-toast.error {
+  border-color: rgba(255, 109, 109, 0.85);
+  color: #ffd2d2;
+}
+
+
