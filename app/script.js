@@ -2081,4 +2081,3 @@ window.addEventListener("load", function () {
     if (toastHideTimeout) clearTimeout(toastHideTimeout);
   });
 });
-
