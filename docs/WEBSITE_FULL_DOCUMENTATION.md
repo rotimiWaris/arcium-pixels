@@ -133,7 +133,6 @@ This is a defense-in-depth UI guard for the showcase slot.
 
 Exposed helpers:
 
-- `window.arciumPixels.refreshBoard()`
 - `window.arciumPixelsCache.export()`
 
 These assist manual recovery/testing of board state.
@@ -142,7 +141,7 @@ These assist manual recovery/testing of board state.
 
 Program ID:
 
-- `V7z3BRz2T8XX6gCQf5nYibHRm3KhDN38Z9HPp5tiFdc`
+- `7U2tXnjHxXRB4txpGW9tB5n1CoPJqwRsn5Da63ddgVp4`
 
 Admin initializer authority:
 

@@ -3,7 +3,7 @@ window.APP_CONFIG = {
 
   // Public, production-safe config only
   solanaNetwork: "devnet",
-  solanaProgramId: "V7z3BRz2T8XX6gCQf5nYibHRm3KhDN38Z9HPp5tiFdc",
+  solanaProgramId: "7U2tXnjHxXRB4txpGW9tB5n1CoPJqwRsn5Da63ddgVp4",
   indexerApiBaseUrl: "https://arcium-pixels-production.up.railway.app",
 
   // Feature toggles

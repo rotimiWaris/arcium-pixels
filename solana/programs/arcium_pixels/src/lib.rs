@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-declare_id!("V7z3BRz2T8XX6gCQf5nYibHRm3KhDN38Z9HPp5tiFdc");
+declare_id!("7U2tXnjHxXRB4txpGW9tB5n1CoPJqwRsn5Da63ddgVp4");
 pub const ADMIN_AUTHORITY: Pubkey = pubkey!("FTGLYKah3ZXRNSMb1uji2DXiTTHt8isPYqLxnG6oNJrf");
 
 #[program]

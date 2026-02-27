@@ -68,14 +68,20 @@
     <script src="config.js"></script>
     <script>
       window.APP_CONFIG = window.APP_CONFIG || {};
-      if (
-        window.location.hostname === "localhost" ||
-        window.location.hostname === "127.0.0.1"
-      ) {
-        const localConfigScript = document.createElement("script");
-        localConfigScript.src = "config.local.js";
-        document.head.appendChild(localConfigScript);
-      }
+      window.__appConfigReady = new Promise((resolve) => {
+        if (
+          window.location.hostname === "localhost" ||
+          window.location.hostname === "127.0.0.1"
+        ) {
+          const localConfigScript = document.createElement("script");
+          localConfigScript.src = "config.local.js";
+          localConfigScript.onload = () => resolve();
+          localConfigScript.onerror = () => resolve();
+          document.head.appendChild(localConfigScript);
+          return;
+        }
+        resolve();
+      });
     </script>
     <div class="text-logo" aria-label="Arcium Pixels logo">Arcium Pixels</div>
     <div
@@ -178,7 +184,15 @@
     </div>
     <div id="appToast" class="app-toast" role="status" aria-live="polite"></div>
 
-    <script type="module" src="script.js"></script>
+    <script type="module">
+      const boot = () => import("./script.js");
+      const ready = window.__appConfigReady;
+      if (ready && typeof ready.then === "function") {
+        ready.then(boot).catch(boot);
+      } else {
+        boot();
+      }
+    </script>
   </body>
 </html>
 

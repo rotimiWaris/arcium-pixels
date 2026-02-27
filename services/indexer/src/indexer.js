@@ -10,7 +10,7 @@ export async function syncPixelsOnce({ connection, programId, pool }) {
   const slot = await connection.getSlot("confirmed");
   const accounts = await fetchProgramPixelAccounts(connection, programId);
   const prepared = [];
-  const staleDuplicatePixelIds = [];
+  const activePixelIds = [];
   let written = 0;
 
   for (let i = 0; i < accounts.length; i++) {
@@ -42,20 +42,22 @@ export async function syncPixelsOnce({ connection, programId, pool }) {
     const normalized = String(row.username || "").trim().toLowerCase();
     if (normalized) {
       if (seenUsernames.has(normalized)) {
-        staleDuplicatePixelIds.push(row.pixelId);
         continue;
       }
       seenUsernames.add(normalized);
     }
     await upsertPixel(pool, row);
+    activePixelIds.push(row.pixelId);
     written += 1;
   }
 
-  if (staleDuplicatePixelIds.length > 0) {
+  if (activePixelIds.length > 0) {
     await pool.query(
-      "delete from public.pixels where pixel_id = any($1::int[])",
-      [staleDuplicatePixelIds],
+      "delete from public.pixels where not (pixel_id = any($1::int[]))",
+      [activePixelIds],
     );
+  } else {
+    await pool.query("delete from public.pixels");
   }
 
   await setSyncState(pool, {

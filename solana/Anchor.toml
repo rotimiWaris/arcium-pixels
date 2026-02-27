@@ -3,10 +3,10 @@ seeds = false
 skip-lint = false
 
 [programs.localnet]
-arcium_pixels = "V7z3BRz2T8XX6gCQf5nYibHRm3KhDN38Z9HPp5tiFdc"
+arcium_pixels = "7U2tXnjHxXRB4txpGW9tB5n1CoPJqwRsn5Da63ddgVp4"
 
 [programs.devnet]
-arcium_pixels = "V7z3BRz2T8XX6gCQf5nYibHRm3KhDN38Z9HPp5tiFdc"
+arcium_pixels = "7U2tXnjHxXRB4txpGW9tB5n1CoPJqwRsn5Da63ddgVp4"
 
 [registry]
 url = "https://api.apr.dev"

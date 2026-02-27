@@ -10,7 +10,7 @@ import {
 // Keep production working even if external config files fail to load.
 const DEFAULT_APP_CONFIG = {
   solanaNetwork: "devnet",
-  solanaProgramId: "V7z3BRz2T8XX6gCQf5nYibHRm3KhDN38Z9HPp5tiFdc",
+  solanaProgramId: "7U2tXnjHxXRB4txpGW9tB5n1CoPJqwRsn5Da63ddgVp4",
   indexerApiBaseUrl: "https://arcium-pixels-production.up.railway.app",
   enableArciumEncryption: true,
   arciumPolicyDefault: "public_view",
@@ -22,8 +22,8 @@ window.APP_CONFIG = {
   ...(window.APP_CONFIG || {}),
 };
 
-// ONLY WANNA RUN THE CODE WHEN BROWSER LOADS
-window.addEventListener("load", function () {
+// App bootstrap (safe even if module loads after window "load" fired)
+function bootApp() {
   const APP_CONFIG = window.APP_CONFIG || {};
   const WALLET_AUTOCONNECT_DISABLED_KEY =
     "arcium_pixels_wallet_autoconnect_disabled";
@@ -31,7 +31,7 @@ window.addEventListener("load", function () {
     "arcium_pixels_wallet_provider_preference";
   const SOLANA_NETWORK = "devnet";
   const SOLANA_PROGRAM_ID =
-    APP_CONFIG.solanaProgramId || "V7z3BRz2T8XX6gCQf5nYibHRm3KhDN38Z9HPp5tiFdc";
+    APP_CONFIG.solanaProgramId || "7U2tXnjHxXRB4txpGW9tB5n1CoPJqwRsn5Da63ddgVp4";
   const INDEXER_API_BASE_URL = APP_CONFIG.indexerApiBaseUrl || "";
   const ADMIN_WALLET_PUBLIC_KEY =
     APP_CONFIG.adminWalletPublicKey ||
@@ -385,6 +385,24 @@ window.addEventListener("load", function () {
       }
     }
     return null;
+  }
+
+  function clearPixelProfilesCache() {
+    try {
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+        if (key.startsWith("arcium_pixels_cache:")) {
+          keysToRemove.push(key);
+        }
+      }
+      for (let i = 0; i < keysToRemove.length; i++) {
+        localStorage.removeItem(keysToRemove[i]);
+      }
+    } catch {
+      // Ignore storage failures.
+    }
   }
 
   function hydratePixelProfilesFromCache() {
@@ -2149,7 +2167,51 @@ window.addEventListener("load", function () {
           username: pendingProfile.username,
           imageUrl: pendingProfile.imageUrl,
         });
-        await refreshClaimedPixels();
+        // Optimistic UI update so claim appears immediately even before indexer catches up.
+        const claimedPixelId = Number(activeParticle.id);
+        const claimedPixelKey = String(claimedPixelId);
+        const isShowcasePrivatePixel =
+          SHOWCASE_PRIVATE_PIXEL_IDS.includes(claimedPixelId) &&
+          FORCE_SHOWCASE_PRIVATE;
+        const optimisticProfile = {
+          username: isShowcasePrivatePixel ? "" : pendingProfile.username,
+          imageUrl: isShowcasePrivatePixel ? "" : pendingProfile.imageUrl,
+          claimedBy: currentWalletPublicKey || "",
+          ownerUserId: currentWalletPublicKey || "",
+          locked: isShowcasePrivatePixel,
+        };
+        applyProfiles({
+          ...particleProfiles,
+          [claimedPixelKey]: optimisticProfile,
+        });
+
+        // Pull fresh on-chain state immediately.
+        await fetchClaimedPixelsFromSolana();
+
+        // Keep showcase private behavior stable until indexer reconciliation arrives.
+        if (isShowcasePrivatePixel) {
+          const latest = particleProfiles[claimedPixelKey] || optimisticProfile;
+          applyProfiles({
+            ...particleProfiles,
+            [claimedPixelKey]: {
+              ...latest,
+              username: "",
+              imageUrl: "",
+              claimedBy: latest.claimedBy || currentWalletPublicKey || "",
+              ownerUserId: latest.ownerUserId || currentWalletPublicKey || "",
+              locked: true,
+            },
+          });
+        }
+
+        // Reconcile with indexer after short delays (sync lag safe).
+        window.setTimeout(() => {
+          refreshClaimedPixels().catch(() => {});
+        }, 1500);
+        window.setTimeout(() => {
+          refreshClaimedPixels().catch(() => {});
+        }, 5000);
+
         const shortSig = `${result.signature.slice(0, 8)}...${result.signature.slice(-8)}`;
         fetchStatus.textContent = `Claimed on Solana. Tx: ${shortSig}`;
         showToast(
@@ -2279,8 +2341,10 @@ window.addEventListener("load", function () {
   });
 
   hydratePixelProfilesFromCache();
-  refreshClaimedPixels().catch((error) => {
+  forceRefreshClaimedPixels().catch((error) => {
     console.error("Failed to fetch Solana pixels:", error.message || error);
+    applyProfiles({});
+    clearPixelProfilesCache();
   });
   refreshArciumStatus().catch(() => {});
   arciumStatusIntervalId = window.setInterval(() => {
@@ -2356,10 +2420,6 @@ window.addEventListener("load", function () {
       }
     },
   };
-  window.arciumPixels = {
-    refreshBoard: forceRefreshClaimedPixels,
-  };
-
   // Optimized resize handler
   let resizeTimeout;
   window.addEventListener("resize", () => {
@@ -2376,4 +2436,10 @@ window.addEventListener("load", function () {
     if (arciumStatusIntervalId) clearInterval(arciumStatusIntervalId);
     if (toastHideTimeout) clearTimeout(toastHideTimeout);
   });
-});
+}
+
+if (document.readyState === "complete") {
+  bootApp();
+} else {
+  window.addEventListener("load", bootApp, { once: true });
+}
