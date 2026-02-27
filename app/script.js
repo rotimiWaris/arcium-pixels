@@ -746,8 +746,14 @@ function bootApp() {
         const decoded = decodePixelAccount(raw);
         if (!decoded || decoded.pixelId <= 0) continue;
         if (decoded.owner === "11111111111111111111111111111111") continue;
-
-        const meta = await resolveProfileFromMetadataUri(decoded.metadataUri);
+        let meta = null;
+        try {
+          meta = await resolveProfileFromMetadataUri(decoded.metadataUri);
+        } catch {
+          // Metadata may be temporarily unavailable (IPFS/indexer lag).
+          // Keep the claim visible and fill metadata later.
+          meta = null;
+        }
         next[String(decoded.pixelId)] = {
           username: meta?.username || meta?.u || "",
           imageUrl: meta?.image_url || meta?.i || "",
