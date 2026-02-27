@@ -25,7 +25,11 @@ window.APP_CONFIG = {
 // ONLY WANNA RUN THE CODE WHEN BROWSER LOADS
 window.addEventListener("load", function () {
   const APP_CONFIG = window.APP_CONFIG || {};
-  const SOLANA_NETWORK = APP_CONFIG.solanaNetwork || "devnet";
+  const WALLET_AUTOCONNECT_DISABLED_KEY =
+    "arcium_pixels_wallet_autoconnect_disabled";
+  const WALLET_PROVIDER_PREFERENCE_KEY =
+    "arcium_pixels_wallet_provider_preference";
+  const SOLANA_NETWORK = "devnet";
   const SOLANA_PROGRAM_ID =
     APP_CONFIG.solanaProgramId || "V7z3BRz2T8XX6gCQf5nYibHRm3KhDN38Z9HPp5tiFdc";
   const INDEXER_API_BASE_URL = APP_CONFIG.indexerApiBaseUrl || "";
@@ -45,10 +49,6 @@ window.addEventListener("load", function () {
         .filter(Number.isFinite)
     : [1];
   const FORCE_SHOWCASE_PRIVATE = APP_CONFIG.forceShowcasePrivate !== false;
-  const WALLET_AUTOCONNECT_DISABLED_KEY =
-    "arcium_pixels_wallet_autoconnect_disabled";
-  const WALLET_PROVIDER_PREFERENCE_KEY =
-    "arcium_pixels_wallet_provider_preference";
   const PIXEL_CACHE_VERSION = 1;
   const PIXEL_CACHE_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
   const solanaConnection = new Connection(clusterApiUrl(SOLANA_NETWORK), {
@@ -883,11 +883,11 @@ window.addEventListener("load", function () {
     }
     connectWalletBtn.disabled = false;
     if (currentWalletPublicKey) {
-      walletStatus.textContent = `Wallet: ${shortenAddress(currentWalletPublicKey)}`;
+      walletStatus.textContent = `Wallet: ${shortenAddress(currentWalletPublicKey)} | Devnet`;
       connectWalletBtn.style.display = "none";
       disconnectWalletBtn.style.display = "inline-block";
     } else {
-      walletStatus.textContent = "Wallet not connected";
+      walletStatus.textContent = "Wallet not connected (Devnet)";
       connectWalletBtn.style.display = "inline-block";
       disconnectWalletBtn.style.display = "none";
     }
@@ -1942,6 +1942,7 @@ window.addEventListener("load", function () {
         closeModal();
       } catch (error) {
         const message = String(error?.message || "");
+        const lowerMessage = message.toLowerCase();
         console.error("Solana claim error:", error);
         if (message.includes("WALLET_NOT_CONNECTED")) {
           showActionFeedback("Connect your Solana wallet first.", "error");
@@ -1985,11 +1986,18 @@ window.addEventListener("load", function () {
         ) {
           showActionFeedback("Transaction cancelled in wallet.", "error");
         } else if (
-          message.includes("blockhash not found") ||
-          message.includes("Transaction simulation failed")
+          lowerMessage.includes("attempt to load a program that does not exist")
         ) {
           showActionFeedback(
-            "Transaction failed on RPC. Check network (devnet/mainnet) and program deployment.",
+            "Program not found on Devnet. Confirm program deployment and wallet network.",
+            "error",
+          );
+        } else if (
+          lowerMessage.includes("blockhash not found") ||
+          lowerMessage.includes("transaction simulation failed")
+        ) {
+          showActionFeedback(
+            "Transaction failed on RPC. Ensure your wallet is on Devnet and the program is deployed.",
             "error",
           );
         } else if (message.includes("TX_EXPIRED_BEFORE_CONFIRMATION")) {
@@ -2076,9 +2084,9 @@ window.addEventListener("load", function () {
     });
 
     document.addEventListener("click", (event) => {
-      const insideToggle = walletProviderToggle.contains(event.target);
-      const insideMenu = walletProviderMenu.contains(event.target);
-      if (!insideToggle && !insideMenu) closeWalletProviderMenu();
+      const insideWalletToggle = walletProviderToggle.contains(event.target);
+      const insideWalletMenu = walletProviderMenu.contains(event.target);
+      if (!insideWalletToggle && !insideWalletMenu) closeWalletProviderMenu();
     });
   }
 
@@ -2103,6 +2111,7 @@ window.addEventListener("load", function () {
       bindWalletProviderEvents();
     });
   }
+
   bindWalletProviderEvents();
 
   // Optional cache backup helper (browser console):
