@@ -4,6 +4,7 @@ window.APP_CONFIG = {
   // Solana (public)
   solanaNetwork: "devnet",
   solanaProgramId: "7U2tXnjHxXRB4txpGW9tB5n1CoPJqwRsn5Da63ddgVp4",
+  boardTotalPixels: 512,
   indexerApiBaseUrl: "http://localhost:8787",
 
   // Arcium/frontend behavior

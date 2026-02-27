@@ -37,7 +37,11 @@ function bootApp() {
   const ADMIN_WALLET_PUBLIC_KEY =
     APP_CONFIG.adminWalletPublicKey ||
     "FTGLYKah3ZXRNSMb1uji2DXiTTHt8isPYqLxnG6oNJrf";
-  const BOARD_TOTAL_PIXELS = Number(APP_CONFIG.boardTotalPixels || 512);
+  const configuredBoardPixels = Number(APP_CONFIG.boardTotalPixels);
+  const BOARD_TOTAL_PIXELS =
+    Number.isFinite(configuredBoardPixels) && configuredBoardPixels > 0
+      ? Math.floor(configuredBoardPixels)
+      : 512;
   const PINATA_JWT = APP_CONFIG.pinataJwt || "YOUR_PINATA_JWT";
   const ENABLE_ARCIUM_ENCRYPTION = APP_CONFIG.enableArciumEncryption === true;
   const METADATA_ENCRYPTION_KEY = APP_CONFIG.metadataEncryptionKey || "";
@@ -1620,7 +1624,7 @@ function bootApp() {
       this.baseParticleSize = 3.5;
       this.minParticleSize = 0.25;
       this.particleSize = this.baseParticleSize;
-      this.maxParticles = 512;
+      this.maxParticles = BOARD_TOTAL_PIXELS;
       this.normalizedShapePoints = this.getNormalizedShapePoints();
       this.updateLayout();
     }
@@ -1825,7 +1829,9 @@ function bootApp() {
         const p = this.normalizedShapePoints[i];
         const x = this.x + p.nx * (this.renderWidth - 1);
         const y = this.y + p.ny * (this.renderHeight - 1);
-        this.particleArray.push(new Particle(this, x, y, this.particleSize, i));
+        this.particleArray.push(
+          new Particle(this, x, y, this.particleSize, i + 1),
+        );
       }
 
       context.clearRect(0, 0, this.width, this.height);
@@ -2255,10 +2261,12 @@ function bootApp() {
             "Encryption key missing. Set APP_CONFIG.metadataEncryptionKey.",
             "error",
           );
-        } else if (
-          message.includes("Invalid pixel id") ||
-          message.includes("InstructionFallbackNotFound")
-        ) {
+        } else if (message.includes("Invalid pixel id")) {
+          showActionFeedback(
+            "Invalid pixel id. Check APP_CONFIG.boardTotalPixels matches your initialized board.",
+            "error",
+          );
+        } else if (message.includes("InstructionFallbackNotFound")) {
           showActionFeedback(
             "Program call failed. Confirm your deployed program matches the current Rust code.",
             "error",
