@@ -44,6 +44,7 @@ window.addEventListener("load", function () {
         .map((value) => Number(value))
         .filter(Number.isFinite)
     : [1];
+  const FORCE_SHOWCASE_PRIVATE = APP_CONFIG.forceShowcasePrivate !== false;
   const WALLET_AUTOCONNECT_DISABLED_KEY =
     "arcium_pixels_wallet_autoconnect_disabled";
   const WALLET_PROVIDER_PREFERENCE_KEY =
@@ -507,16 +508,20 @@ window.addEventListener("load", function () {
       for (let i = 0; i < records.length; i++) {
         const row = records[i];
         if (!row || !row.pixel_id) continue;
+        const isShowcasePixel = SHOWCASE_PRIVATE_PIXEL_IDS.includes(
+          Number(row.pixel_id),
+        );
+        const backendLocked = Boolean(
+          row.owner && !row.username && !row.image_url && row.metadata_uri,
+        );
         const isLocked = Boolean(
-          SHOWCASE_PRIVATE_PIXEL_IDS.includes(Number(row.pixel_id)) &&
-          row.owner &&
-          !row.username &&
-          !row.image_url &&
-          row.metadata_uri,
+          isShowcasePixel &&
+            row.owner &&
+            (FORCE_SHOWCASE_PRIVATE || backendLocked),
         );
         next[String(row.pixel_id)] = {
-          username: row.username || "",
-          imageUrl: row.image_url || "",
+          username: isLocked ? "" : row.username || "",
+          imageUrl: isLocked ? "" : row.image_url || "",
           claimedBy: row.owner || "",
           ownerUserId: row.owner || "",
           locked: isLocked,
@@ -569,8 +574,11 @@ window.addEventListener("load", function () {
       if (!SHOWCASE_PRIVATE_PIXEL_IDS.includes(pixelId)) continue;
       const key = String(pixelId);
       const existing = particleProfiles[key];
-      const isLocked = Boolean(
+      const backendLocked = Boolean(
         row.owner && !row.username && !row.image_url && row.metadata_uri,
+      );
+      const isLocked = Boolean(
+        row.owner && (FORCE_SHOWCASE_PRIVATE || backendLocked),
       );
 
       if (isLocked) {

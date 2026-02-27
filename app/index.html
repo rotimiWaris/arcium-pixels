@@ -66,9 +66,16 @@
   </head>
   <body>
     <script src="config.js"></script>
-    <script src="config.local.js"></script>
     <script>
       window.APP_CONFIG = window.APP_CONFIG || {};
+      if (
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1"
+      ) {
+        const localConfigScript = document.createElement("script");
+        localConfigScript.src = "config.local.js";
+        document.head.appendChild(localConfigScript);
+      }
     </script>
     <div class="text-logo" aria-label="Arcium Pixels logo">Arcium Pixels</div>
     <div
@@ -174,3 +181,4 @@
     <script type="module" src="script.js"></script>
   </body>
 </html>
+
