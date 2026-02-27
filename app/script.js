@@ -51,7 +51,11 @@ window.addEventListener("load", function () {
   const FORCE_SHOWCASE_PRIVATE = APP_CONFIG.forceShowcasePrivate !== false;
   const PIXEL_CACHE_VERSION = 1;
   const PIXEL_CACHE_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
+  const MIN_DEVNET_CLAIM_BALANCE_LAMPORTS = 10000;
   const solanaConnection = new Connection(clusterApiUrl(SOLANA_NETWORK), {
+    commitment: "confirmed",
+  });
+  const mainnetConnection = new Connection(clusterApiUrl("mainnet-beta"), {
     commitment: "confirmed",
   });
 
@@ -85,6 +89,8 @@ window.addEventListener("load", function () {
   let walletManualConnectInProgress = false;
   let walletProviderPreference = "auto";
   let activeWalletEventProvider = null;
+  let walletNetworkState = "unknown";
+  let walletDevnetBalanceLamports = null;
   let activeParticle = null;
   let pendingProfile = null;
   let toastHideTimeout = null;
@@ -866,6 +872,148 @@ window.addEventListener("load", function () {
     }
   }
 
+  function parseClusterFromUnknown(value) {
+    if (value == null) return null;
+    const text = String(value).toLowerCase();
+    if (text.includes("mainnet")) return "mainnet-beta";
+    if (text.includes("devnet")) return "devnet";
+    if (text.includes("testnet")) return "testnet";
+    return null;
+  }
+
+  function detectWalletClusterSync(provider) {
+    if (!provider) return null;
+    const candidates = [
+      provider.network,
+      provider.cluster,
+      provider.rpcEndpoint,
+      provider.connection?.rpcEndpoint,
+      provider.publicConfig?.network,
+      provider.publicConfig?.cluster,
+      provider?.provider?.network,
+      provider?.provider?.cluster,
+    ];
+    for (let i = 0; i < candidates.length; i++) {
+      const cluster = parseClusterFromUnknown(candidates[i]);
+      if (cluster) return cluster;
+    }
+    return null;
+  }
+
+  async function detectWalletCluster(provider, walletAddress) {
+    const syncCluster = detectWalletClusterSync(provider);
+    if (syncCluster) return syncCluster;
+
+    if (provider && typeof provider.request === "function") {
+      const probes = [
+        { method: "wallet_getCluster" },
+        { method: "solana_getCluster" },
+        { method: "getCluster" },
+        { method: "wallet_getNetwork" },
+      ];
+      for (let i = 0; i < probes.length; i++) {
+        try {
+          const result = await provider.request(probes[i]);
+          const cluster =
+            parseClusterFromUnknown(result) ||
+            parseClusterFromUnknown(result?.cluster) ||
+            parseClusterFromUnknown(result?.network);
+          if (cluster) return cluster;
+        } catch {
+          // probe next method
+        }
+      }
+    }
+
+    // Heuristic fallback: mainnet-funded but empty on devnet usually means wrong network.
+    if (walletAddress) {
+      try {
+        const key = new PublicKey(walletAddress);
+        const [devnetBalance, mainnetBalance] = await Promise.all([
+          solanaConnection.getBalance(key, "confirmed").catch(() => null),
+          mainnetConnection.getBalance(key, "confirmed").catch(() => null),
+        ]);
+        if (
+          Number.isFinite(devnetBalance) &&
+          Number.isFinite(mainnetBalance) &&
+          devnetBalance === 0 &&
+          mainnetBalance > 0
+        ) {
+          return "likely-mainnet";
+        }
+      } catch {
+        // keep unknown
+      }
+    }
+    return "unknown";
+  }
+
+  async function refreshWalletNetworkState(provider, walletAddress) {
+    walletNetworkState = await detectWalletCluster(provider, walletAddress);
+  }
+
+  function isWrongNetworkForDevnet() {
+    return (
+      walletNetworkState === "mainnet-beta" ||
+      walletNetworkState === "likely-mainnet"
+    );
+  }
+
+  function getWrongNetworkMessage() {
+    if (walletNetworkState === "mainnet-beta") {
+      return "Wallet appears on Mainnet. Switch wallet network to Devnet.";
+    }
+    if (walletNetworkState === "likely-mainnet") {
+      return "Wallet likely on Mainnet (no devnet SOL detected). Switch wallet network to Devnet.";
+    }
+    return "Wallet is not ready on Devnet. Switch wallet network to Devnet.";
+  }
+
+  function formatSol(lamports) {
+    if (!Number.isFinite(lamports)) return "0";
+    return (lamports / 1_000_000_000).toFixed(4);
+  }
+
+  function hasEnoughDevnetBalance() {
+    return (
+      Number.isFinite(walletDevnetBalanceLamports) &&
+      walletDevnetBalanceLamports >= MIN_DEVNET_CLAIM_BALANCE_LAMPORTS
+    );
+  }
+
+  async function refreshWalletDevnetBalance(walletAddress) {
+    if (!walletAddress) {
+      walletDevnetBalanceLamports = null;
+      return;
+    }
+    try {
+      const key = new PublicKey(walletAddress);
+      walletDevnetBalanceLamports = await solanaConnection.getBalance(
+        key,
+        "confirmed",
+      );
+    } catch {
+      walletDevnetBalanceLamports = null;
+    }
+  }
+
+  async function rejectWrongNetworkConnectionIfDetected(provider) {
+    if (!isWrongNetworkForDevnet()) return false;
+    showActionFeedback(getWrongNetworkMessage(), "error");
+    try {
+      if (isSupportedWalletProvider(provider)) {
+        await provider.disconnect();
+      }
+    } catch {
+      // no-op
+    }
+    currentWalletPublicKey = null;
+    walletNetworkState = "unknown";
+    walletDevnetBalanceLamports = null;
+    updateWalletUI();
+    return true;
+  }
+
   function updateWalletUI() {
     if (!walletStatus || !connectWalletBtn || !disconnectWalletBtn) return;
     const provider = getWalletProvider();
@@ -883,7 +1031,15 @@ window.addEventListener("load", function () {
     }
     connectWalletBtn.disabled = false;
     if (currentWalletPublicKey) {
-      walletStatus.textContent = `Wallet: ${shortenAddress(currentWalletPublicKey)} | Devnet`;
+      if (isWrongNetworkForDevnet()) {
+        walletStatus.textContent = `Wallet: ${shortenAddress(currentWalletPublicKey)} | Wrong network (switch to Devnet)`;
+      } else if (!Number.isFinite(walletDevnetBalanceLamports)) {
+        walletStatus.textContent = `Wallet: ${shortenAddress(currentWalletPublicKey)} | Devnet balance: checking...`;
+      } else if (!hasEnoughDevnetBalance()) {
+        walletStatus.textContent = `Wallet: ${shortenAddress(currentWalletPublicKey)} | Low Devnet SOL (${formatSol(walletDevnetBalanceLamports)} SOL)`;
+      } else {
+        walletStatus.textContent = `Wallet: ${shortenAddress(currentWalletPublicKey)} | Devnet (${formatSol(walletDevnetBalanceLamports)} SOL)`;
+      }
       connectWalletBtn.style.display = "none";
       disconnectWalletBtn.style.display = "inline-block";
     } else {
@@ -908,6 +1064,11 @@ window.addEventListener("load", function () {
       if (!publicKey) throw new Error("WALLET_PUBLIC_KEY_MISSING");
       setWalletAutoConnectDisabled(false);
       currentWalletPublicKey = publicKey.toString();
+      await refreshWalletNetworkState(provider, currentWalletPublicKey);
+      await refreshWalletDevnetBalance(currentWalletPublicKey);
+      if (await rejectWrongNetworkConnectionIfDetected(provider)) {
+        return;
+      }
       updateWalletUI();
       await refreshClaimedPixels();
       await tryAutoInitializeBoardForAdmin();
@@ -916,6 +1077,11 @@ window.addEventListener("load", function () {
       if (provider?.publicKey) {
         setWalletAutoConnectDisabled(false);
         currentWalletPublicKey = provider.publicKey.toString();
+        await refreshWalletNetworkState(provider, currentWalletPublicKey);
+        await refreshWalletDevnetBalance(currentWalletPublicKey);
+        if (await rejectWrongNetworkConnectionIfDetected(provider)) {
+          return;
+        }
         updateWalletUI();
         await refreshClaimedPixels();
         await tryAutoInitializeBoardForAdmin();
@@ -949,6 +1115,8 @@ window.addEventListener("load", function () {
       }
     }
     currentWalletPublicKey = null;
+    walletNetworkState = "unknown";
+    walletDevnetBalanceLamports = null;
     if (walletStatus) walletStatus.textContent = "Wallet disconnected";
     updateWalletUI();
     await refreshClaimedPixels();
@@ -970,6 +1138,8 @@ window.addEventListener("load", function () {
     provider.on("connect", async (publicKey) => {
       if (isWalletAutoConnectDisabled() && !walletManualConnectInProgress) {
         currentWalletPublicKey = null;
+        walletNetworkState = "unknown";
+        walletDevnetBalanceLamports = null;
         updateWalletUI();
         try {
           await provider.disconnect();
@@ -979,22 +1149,36 @@ window.addEventListener("load", function () {
         return;
       }
       currentWalletPublicKey = publicKey?.toString?.() || null;
+      await refreshWalletNetworkState(provider, currentWalletPublicKey);
+      await refreshWalletDevnetBalance(currentWalletPublicKey);
+      if (await rejectWrongNetworkConnectionIfDetected(provider)) {
+        return;
+      }
       updateWalletUI();
       refreshClaimedPixels().catch(() => {});
       tryAutoInitializeBoardForAdmin();
     });
     provider.on("disconnect", () => {
       currentWalletPublicKey = null;
+      walletNetworkState = "unknown";
+      walletDevnetBalanceLamports = null;
       updateWalletUI();
       refreshClaimedPixels().catch(() => {});
     });
-    provider.on("accountChanged", (publicKey) => {
+    provider.on("accountChanged", async (publicKey) => {
       if (isWalletAutoConnectDisabled() && !walletManualConnectInProgress) {
         currentWalletPublicKey = null;
+        walletNetworkState = "unknown";
+        walletDevnetBalanceLamports = null;
         updateWalletUI();
         return;
       }
       currentWalletPublicKey = publicKey?.toString?.() || null;
+      await refreshWalletNetworkState(provider, currentWalletPublicKey);
+      await refreshWalletDevnetBalance(currentWalletPublicKey);
+      if (await rejectWrongNetworkConnectionIfDetected(provider)) {
+        return;
+      }
       updateWalletUI();
       refreshClaimedPixels().catch(() => {});
       tryAutoInitializeBoardForAdmin();
@@ -1003,11 +1187,16 @@ window.addEventListener("load", function () {
     if (!isWalletAutoConnectDisabled()) {
       provider
         .connect({ onlyIfTrusted: true })
-        .then((res) => {
+        .then(async (res) => {
           currentWalletPublicKey =
             res?.publicKey?.toString?.() ||
             provider.publicKey?.toString?.() ||
             null;
+          await refreshWalletNetworkState(provider, currentWalletPublicKey);
+          await refreshWalletDevnetBalance(currentWalletPublicKey);
+          if (await rejectWrongNetworkConnectionIfDetected(provider)) {
+            return;
+          }
           updateWalletUI();
           refreshClaimedPixels().catch(() => {});
           tryAutoInitializeBoardForAdmin();
@@ -1017,6 +1206,8 @@ window.addEventListener("load", function () {
         });
     } else {
       currentWalletPublicKey = null;
+      walletNetworkState = "unknown";
+      walletDevnetBalanceLamports = null;
       if (provider.isConnected) {
         provider.disconnect().catch(() => {
           // no-op
@@ -1807,6 +1998,19 @@ window.addEventListener("load", function () {
       if (addBtn) addBtn.disabled = true;
       return;
     }
+    if (isWrongNetworkForDevnet()) {
+      showActionFeedback(getWrongNetworkMessage(), "error");
+      if (addBtn) addBtn.disabled = true;
+      return;
+    }
+    if (!hasEnoughDevnetBalance()) {
+      showActionFeedback(
+        "Not enough Devnet SOL to claim. Fund this wallet on Devnet and retry.",
+        "error",
+      );
+      if (addBtn) addBtn.disabled = true;
+      return;
+    }
     const currentUserId = getCurrentUserId();
     const alreadyOwnedParticleId = findClaimedParticleIdByUser(currentUserId);
     if (
@@ -1890,6 +2094,19 @@ window.addEventListener("load", function () {
 
     if (!currentWalletPublicKey) {
       showActionFeedback("Connect your Solana wallet first.", "error");
+      addBtn.disabled = true;
+      return;
+    }
+    if (isWrongNetworkForDevnet()) {
+      showActionFeedback(getWrongNetworkMessage(), "error");
+      addBtn.disabled = true;
+      return;
+    }
+    if (!hasEnoughDevnetBalance()) {
+      showActionFeedback(
+        "Not enough Devnet SOL to claim. Fund this wallet on Devnet and retry.",
+        "error",
+      );
       addBtn.disabled = true;
       return;
     }
@@ -2000,6 +2217,16 @@ window.addEventListener("load", function () {
             "Transaction failed on RPC. Ensure your wallet is on Devnet and the program is deployed.",
             "error",
           );
+        } else if (
+          lowerMessage.includes("insufficient") &&
+          (lowerMessage.includes("sol") ||
+            lowerMessage.includes("lamport") ||
+            lowerMessage.includes("fund"))
+        ) {
+          showActionFeedback(
+            "Insufficient funds for this transaction. Ensure wallet is on Devnet, then fund this wallet with Devnet SOL and retry.",
+            "error",
+          );
         } else if (message.includes("TX_EXPIRED_BEFORE_CONFIRMATION")) {
           showActionFeedback(
             "Transaction expired before confirmation. Approve quickly and retry.",
@@ -2107,6 +2334,8 @@ window.addEventListener("load", function () {
         }
       }
       currentWalletPublicKey = null;
+      walletNetworkState = "unknown";
+      walletDevnetBalanceLamports = null;
       activeWalletEventProvider = null;
       bindWalletProviderEvents();
     });
