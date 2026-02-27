@@ -7,6 +7,21 @@ import {
   clusterApiUrl,
 } from "https://esm.sh/@solana/web3.js@1.95.3";
 
+// Keep production working even if external config files fail to load.
+const DEFAULT_APP_CONFIG = {
+  solanaNetwork: "devnet",
+  solanaProgramId: "V7z3BRz2T8XX6gCQf5nYibHRm3KhDN38Z9HPp5tiFdc",
+  indexerApiBaseUrl: "https://arcium-pixels-production.up.railway.app",
+  enableArciumEncryption: true,
+  arciumPolicyDefault: "public_view",
+  showcasePrivatePixelIds: [1],
+};
+
+window.APP_CONFIG = {
+  ...DEFAULT_APP_CONFIG,
+  ...(window.APP_CONFIG || {}),
+};
+
 // ONLY WANNA RUN THE CODE WHEN BROWSER LOADS
 window.addEventListener("load", function () {
   const APP_CONFIG = window.APP_CONFIG || {};
@@ -473,18 +488,21 @@ window.addEventListener("load", function () {
     }
   }
 
-  async function fetchClaimedPixelsFromIndexer() {
+  async function fetchClaimedPixelsFromIndexer(prefetchedRecords = null) {
     const baseUrl = normalizeIndexerApiBaseUrl();
     if (!baseUrl) return false;
     try {
-      const url = new URL(`${baseUrl}/pixels`);
-      if (currentWalletPublicKey) {
-        url.searchParams.set("viewer", currentWalletPublicKey);
+      let records = prefetchedRecords;
+      if (!Array.isArray(records)) {
+        const url = new URL(`${baseUrl}/pixels`);
+        if (currentWalletPublicKey) {
+          url.searchParams.set("viewer", currentWalletPublicKey);
+        }
+        const response = await fetch(url.toString());
+        if (!response.ok) return false;
+        const payload = await response.json();
+        records = Array.isArray(payload?.pixels) ? payload.pixels : [];
       }
-      const response = await fetch(url.toString());
-      if (!response.ok) return false;
-      const payload = await response.json();
-      const records = Array.isArray(payload?.pixels) ? payload.pixels : [];
       const next = {};
       for (let i = 0; i < records.length; i++) {
         const row = records[i];
@@ -509,6 +527,18 @@ window.addEventListener("load", function () {
     } catch {
       return false;
     }
+  }
+
+  function hasIndexerProfileData(records) {
+    if (!Array.isArray(records) || records.length === 0) return true;
+    for (let i = 0; i < records.length; i++) {
+      const row = records[i];
+      if (!row) continue;
+      if (String(row.username || "").trim() || String(row.image_url || "").trim()) {
+        return true;
+      }
+    }
+    return false;
   }
 
   async function fetchIndexerRows() {
@@ -571,15 +601,25 @@ window.addEventListener("load", function () {
   }
 
   async function refreshClaimedPixels() {
-    const fromChain = await fetchClaimedPixelsFromSolana();
-    if (fromChain) {
-      if (hasIndexerApiBaseUrl()) {
-        const rows = await fetchIndexerRows();
-        if (rows) overlayShowcasePrivacy(rows);
+    let indexerRows = null;
+    if (hasIndexerApiBaseUrl()) {
+      indexerRows = await fetchIndexerRows();
+      if (Array.isArray(indexerRows)) {
+        const fromIndexer = await fetchClaimedPixelsFromIndexer(indexerRows);
+        if (fromIndexer && hasIndexerProfileData(indexerRows)) return true;
       }
-      return true;
     }
-    return fetchClaimedPixelsFromIndexer();
+
+    const fromChain = await fetchClaimedPixelsFromSolana();
+    if (!fromChain) return false;
+
+    if (hasIndexerApiBaseUrl()) {
+      if (!Array.isArray(indexerRows)) {
+        indexerRows = await fetchIndexerRows();
+      }
+      if (indexerRows) overlayShowcasePrivacy(indexerRows);
+    }
+    return true;
   }
 
   async function forceRefreshClaimedPixels() {
@@ -589,15 +629,25 @@ window.addEventListener("load", function () {
       rebuildEffect();
     }
 
-    const fromChain = await fetchClaimedPixelsFromSolana();
-    if (fromChain) {
-      if (hasIndexerApiBaseUrl()) {
-        const rows = await fetchIndexerRows();
-        if (rows) overlayShowcasePrivacy(rows);
+    let indexerRows = null;
+    if (hasIndexerApiBaseUrl()) {
+      indexerRows = await fetchIndexerRows();
+      if (Array.isArray(indexerRows)) {
+        const fromIndexer = await fetchClaimedPixelsFromIndexer(indexerRows);
+        if (fromIndexer && hasIndexerProfileData(indexerRows)) return true;
       }
-      return true;
     }
-    return fetchClaimedPixelsFromIndexer();
+
+    const fromChain = await fetchClaimedPixelsFromSolana();
+    if (!fromChain) return false;
+
+    if (hasIndexerApiBaseUrl()) {
+      if (!Array.isArray(indexerRows)) {
+        indexerRows = await fetchIndexerRows();
+      }
+      if (indexerRows) overlayShowcasePrivacy(indexerRows);
+    }
+    return true;
   }
 
   async function getAnchorAccountDiscriminator(name) {
