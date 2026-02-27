@@ -7,7 +7,7 @@ import {
   clusterApiUrl,
 } from "https://esm.sh/@solana/web3.js@1.95.3";
 
-// Keep production working even if external config files fail to load.
+// WANNA KEEP PRODUCTION WORKING EVEN IF EXTERNAL CONFIG FILES FAIL TO LOAD
 const DEFAULT_APP_CONFIG = {
   solanaNetwork: "devnet",
   solanaProgramId: "7U2tXnjHxXRB4txpGW9tB5n1CoPJqwRsn5Da63ddgVp4",
@@ -22,7 +22,7 @@ window.APP_CONFIG = {
   ...(window.APP_CONFIG || {}),
 };
 
-// App bootstrap (safe even if module loads after window "load" fired)
+// App bootstrap (this is safe even if module loads after window "load" fired)
 function bootApp() {
   const APP_CONFIG = window.APP_CONFIG || {};
   const WALLET_AUTOCONNECT_DISABLED_KEY =
@@ -31,7 +31,8 @@ function bootApp() {
     "arcium_pixels_wallet_provider_preference";
   const SOLANA_NETWORK = "devnet";
   const SOLANA_PROGRAM_ID =
-    APP_CONFIG.solanaProgramId || "7U2tXnjHxXRB4txpGW9tB5n1CoPJqwRsn5Da63ddgVp4";
+    APP_CONFIG.solanaProgramId ||
+    "7U2tXnjHxXRB4txpGW9tB5n1CoPJqwRsn5Da63ddgVp4";
   const INDEXER_API_BASE_URL = APP_CONFIG.indexerApiBaseUrl || "";
   const ADMIN_WALLET_PUBLIC_KEY =
     APP_CONFIG.adminWalletPublicKey ||
@@ -540,8 +541,8 @@ function bootApp() {
         );
         const isLocked = Boolean(
           isShowcasePixel &&
-            row.owner &&
-            (FORCE_SHOWCASE_PRIVATE || backendLocked),
+          row.owner &&
+          (FORCE_SHOWCASE_PRIVATE || backendLocked),
         );
         next[String(row.pixel_id)] = {
           username: isLocked ? "" : row.username || "",
@@ -563,7 +564,10 @@ function bootApp() {
     for (let i = 0; i < records.length; i++) {
       const row = records[i];
       if (!row) continue;
-      if (String(row.username || "").trim() || String(row.image_url || "").trim()) {
+      if (
+        String(row.username || "").trim() ||
+        String(row.image_url || "").trim()
+      ) {
         return true;
       }
     }
@@ -2274,7 +2278,7 @@ function bootApp() {
           lowerMessage.includes("attempt to load a program that does not exist")
         ) {
           showActionFeedback(
-            "Program not found on Devnet. Confirm program deployment and wallet network.",
+            "Program not found on Devnet. Confirm wallet network.",
             "error",
           );
         } else if (
@@ -2282,7 +2286,7 @@ function bootApp() {
           lowerMessage.includes("transaction simulation failed")
         ) {
           showActionFeedback(
-            "Transaction failed on RPC. Ensure your wallet is on Devnet and the program is deployed.",
+            "Transaction failed on RPC. Ensure your wallet is on Devnet.",
             "error",
           );
         } else if (
